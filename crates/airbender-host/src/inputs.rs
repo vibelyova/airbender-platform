@@ -67,7 +67,7 @@ mod tests {
             .expect("write input hex file");
 
         let written = fs::read_to_string(&file_path).expect("read written input hex file");
-        assert_eq!(written, "00000001\n29000000\n");
+        assert_eq!(written, "00000001\n00000029\n");
 
         fs::remove_file(&file_path).expect("remove input hex file");
     }
@@ -79,8 +79,8 @@ mod tests {
 
         // This fixture documents the format expected by CLI and workflow input
         // files. Bincode's standard config encodes small integers as varints, so
-        // `10u32` is a one-byte payload rather than a four-byte little-endian word.
-        assert_eq!(inputs.words(), &[1, 0x0a000000]);
+        // `10u32` is a one-byte payload. Words use little-endian byte order.
+        assert_eq!(inputs.words(), &[1, 0x0000000a]);
     }
 
     fn test_file_path(prefix: &str) -> PathBuf {

@@ -2,7 +2,7 @@
 //!
 //! The input stream is encoded as `u32` words where:
 //! - the first word stores payload byte length,
-//! - each following word stores up to 4 payload bytes in big-endian order,
+//! - each following word stores up to 4 payload bytes in little-endian order,
 //! - the final word is zero-padded when payload length is not a multiple of 4.
 
 use alloc::vec::Vec;
@@ -35,12 +35,12 @@ fn frame_len_word(len: usize) -> Result<u32, WireError> {
 /// The provided callback must yield the frame length word first, then payload words.
 pub fn read_framed_bytes_with(mut read_word: impl FnMut() -> u32) -> Vec<u8> {
     let len = read_word() as usize;
-    let words_needed = len.div_ceil(WORD_BYTES);
+    let words_needed = (len + WORD_BYTES - 1) / WORD_BYTES;
 
     let mut bytes = Vec::with_capacity(len);
     let mut remaining = len;
     for _ in 0..words_needed {
-        let word_bytes = read_word().to_be_bytes();
+        let word_bytes = read_word().to_le_bytes();
         let bytes_to_take = remaining.min(WORD_BYTES);
         bytes.extend_from_slice(&word_bytes[..bytes_to_take]);
         remaining -= bytes_to_take;
@@ -58,7 +58,7 @@ pub fn frame_words_from_bytes(bytes: &[u8]) -> Result<Vec<u32>, WireError> {
     for chunk in bytes.chunks(WORD_BYTES) {
         let mut padded = [0u8; WORD_BYTES];
         padded[..chunk.len()].copy_from_slice(chunk);
-        words.push(u32::from_be_bytes(padded));
+        words.push(u32::from_le_bytes(padded));
     }
     Ok(words)
 }
