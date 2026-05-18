@@ -1,5 +1,5 @@
 use crate::error::Result;
-use airbender_codec::{AirbenderCodec, AirbenderCodecV0};
+use airbender_codec::{AirbenderCodec, AirbenderCodecV1};
 use airbender_core::wire::frame_words_from_bytes;
 use std::fmt::Write as _;
 use std::path::Path;
@@ -17,7 +17,7 @@ impl Inputs {
 
     /// Serialize and append a typed input value.
     pub fn push<T: serde::Serialize>(&mut self, value: &T) -> Result<()> {
-        let bytes = AirbenderCodecV0::encode(value)?;
+        let bytes = AirbenderCodecV1::encode(value)?;
         self.push_bytes(&bytes)?;
         Ok(())
     }
@@ -73,14 +73,13 @@ mod tests {
     }
 
     #[test]
-    fn serializes_small_u32_as_varint_payload() {
+    fn serializes_u32_as_fixed_int_payload() {
         let mut inputs = Inputs::new();
         inputs.push(&10u32).expect("frame input value");
 
-        // This fixture documents the format expected by CLI and workflow input
-        // files. Bincode's standard config encodes small integers as varints, so
-        // `10u32` is a one-byte payload. Words use little-endian byte order.
-        assert_eq!(inputs.words(), &[1, 0x0000000a]);
+        // V1 codec uses fixed-int encoding: u32 is always 4 bytes (LE).
+        // Frame: length word (4) + one data word (0x0000000a in LE).
+        assert_eq!(inputs.words(), &[4, 0x0000000a]);
     }
 
     fn test_file_path(prefix: &str) -> PathBuf {
