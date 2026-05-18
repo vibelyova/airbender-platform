@@ -50,6 +50,47 @@ pub fn read_with<T: serde::de::DeserializeOwned>(
     AirbenderCodecV0::decode(&bytes).map_err(GuestError::Codec)
 }
 
+/// Read a single value using V1 codec (fixed-int encoding, no varints).
+pub fn read_v1_with<T: serde::de::DeserializeOwned>(
+    transport: &mut impl Transport,
+) -> Result<T, GuestError> {
+    use airbender_codec::AirbenderCodecV1;
+    let bytes = read_framed_bytes_with(|| transport.read_word());
+    AirbenderCodecV1::decode(&bytes).map_err(GuestError::Codec)
+}
+
+/// Read a fixed-size value without heap allocation.
+///
+/// The caller provides `ENCODED_SIZE` — the exact number of payload bytes
+/// (excluding the length prefix word). The value is decoded from a stack
+/// buffer, avoiding `Vec` allocation entirely.
+///
+/// # Panics
+/// Panics if the framed length word doesn't match `ENCODED_SIZE`.
+pub fn read_fixed_with<T: serde::de::DeserializeOwned, const ENCODED_SIZE: usize>(
+    transport: &mut impl Transport,
+) -> Result<T, GuestError> {
+    use airbender_codec::AirbenderCodecV1;
+
+    let len = transport.read_word() as usize;
+    assert!(
+        len == ENCODED_SIZE,
+        "read_fixed: expected {ENCODED_SIZE} bytes, got {len}"
+    );
+
+    let words_needed = (ENCODED_SIZE + 3) / 4;
+    let mut buf = [0u8; ENCODED_SIZE];
+    let mut offset = 0;
+    for _ in 0..words_needed {
+        let word_bytes = transport.read_word().to_le_bytes();
+        let to_copy = (ENCODED_SIZE - offset).min(4);
+        buf[offset..offset + to_copy].copy_from_slice(&word_bytes[..to_copy]);
+        offset += to_copy;
+    }
+
+    AirbenderCodecV1::decode(&buf).map_err(GuestError::Codec)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -74,5 +115,29 @@ mod tests {
         let mut transport = MockTransport::new(words);
         let decoded: Payload = read_with(&mut transport).expect("read");
         assert_eq!(decoded, payload);
+    }
+
+    #[test]
+    fn reads_v1_value_from_transport() {
+        use airbender_codec::AirbenderCodecV1;
+        let value = 0xDEADBEEFu32;
+        let encoded = AirbenderCodecV1::encode(&value).expect("encode");
+        let words = frame_words_from_bytes(&encoded).expect("frame words");
+        let mut transport = MockTransport::new(words);
+        let decoded: u32 = read_v1_with(&mut transport).expect("read");
+        assert_eq!(decoded, value);
+    }
+
+    #[test]
+    fn reads_fixed_value_without_alloc() {
+        use airbender_codec::AirbenderCodecV1;
+        // [u64; 4] with fixed-int encoding = 32 bytes exactly
+        let value: [u64; 4] = [1, 2, 3, 4];
+        let encoded = AirbenderCodecV1::encode(&value).expect("encode");
+        assert_eq!(encoded.len(), 32);
+        let words = frame_words_from_bytes(&encoded).expect("frame words");
+        let mut transport = MockTransport::new(words);
+        let decoded: [u64; 4] = read_fixed_with::<_, 32>(&mut transport).expect("read");
+        assert_eq!(decoded, value);
     }
 }
