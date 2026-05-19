@@ -44,26 +44,33 @@ impl<'a, T: Transport> Reader<'a> for WordReader<'a, T> {
             written += 1;
         }
 
-        // Read full words directly
-        while total - written >= 4 {
-            let word = self.transport.read_word();
-            let ptr = unsafe { dst.as_mut_ptr().add(written) };
-            if ptr as usize % 4 == 0 {
-                // Aligned: single u32 store
-                unsafe {
-                    (ptr as *mut u32).write(word);
+        // Read full words — check alignment once, then tight loop
+        let remaining_words = (total - written) / 4;
+        if remaining_words > 0 {
+            let base = unsafe { dst.as_mut_ptr().add(written) };
+            if base as usize % 4 == 0 {
+                // Aligned: write u32 words directly without per-word checks
+                let dst_u32 = base as *mut u32;
+                for i in 0..remaining_words {
+                    unsafe {
+                        dst_u32.add(i).write(self.transport.read_word());
+                    }
                 }
             } else {
-                // Unaligned: byte-by-byte
-                let bytes = word.to_le_bytes();
-                unsafe {
-                    ptr.add(0).write(MaybeUninit::new(bytes[0]));
-                    ptr.add(1).write(MaybeUninit::new(bytes[1]));
-                    ptr.add(2).write(MaybeUninit::new(bytes[2]));
-                    ptr.add(3).write(MaybeUninit::new(bytes[3]));
+                // Unaligned: byte-by-byte for each word
+                for i in 0..remaining_words {
+                    let word = self.transport.read_word();
+                    let bytes = word.to_le_bytes();
+                    let p = unsafe { base.add(i * 4) };
+                    unsafe {
+                        p.add(0).write(MaybeUninit::new(bytes[0]));
+                        p.add(1).write(MaybeUninit::new(bytes[1]));
+                        p.add(2).write(MaybeUninit::new(bytes[2]));
+                        p.add(3).write(MaybeUninit::new(bytes[3]));
+                    }
                 }
             }
-            written += 4;
+            written += remaining_words * 4;
         }
 
         // Read a partial word for remaining bytes
