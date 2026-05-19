@@ -44,14 +44,15 @@ impl<'a, T: Transport> Reader<'a> for WordReader<'a, T> {
             written += 1;
         }
 
-        // Read full words directly
+        // Read full words directly — single u32 store per word on LE targets
         while total - written >= 4 {
             let word = self.transport.read_word();
-            let bytes = word.to_le_bytes();
-            dst[written] = MaybeUninit::new(bytes[0]);
-            dst[written + 1] = MaybeUninit::new(bytes[1]);
-            dst[written + 2] = MaybeUninit::new(bytes[2]);
-            dst[written + 3] = MaybeUninit::new(bytes[3]);
+            // SAFETY: dst[written..written+4] is valid for 4 bytes, and we have
+            // MaybeUninit<u8> which allows uninitialized writes. On LE targets,
+            // writing a u32 directly is equivalent to writing 4 LE bytes.
+            unsafe {
+                (dst.as_mut_ptr().add(written) as *mut u32).write(word);
+            }
             written += 4;
         }
 
