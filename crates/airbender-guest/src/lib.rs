@@ -10,6 +10,7 @@ pub mod commit;
 pub mod cycle;
 pub mod input;
 pub mod transport;
+pub mod word_reader;
 
 pub use commit::{commit, exit_error, Commit};
 pub use cycle::{marker as cycle_marker, record_cycles};

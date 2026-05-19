@@ -14,3 +14,4 @@ readme = "README.md"
 [dependencies]
 serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
 bincode = { workspace = true, default-features = false, features = ["alloc", "serde"] }
+wincode = { version = "0.5.4", default-features = false, features = ["derive"] }

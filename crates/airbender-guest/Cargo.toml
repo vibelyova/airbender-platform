@@ -16,6 +16,7 @@ airbender-core = { path = "../airbender-core", default-features = false }
 airbender-codec = { path = "../airbender-codec" }
 airbender-rt = { path = "../airbender-rt", default-features = false }
 serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
+wincode = { version = "0.5.4", default-features = false, features = ["derive", "alloc"] }
 
 [features]
 default = ["allocator-talc"]
